@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   imageBlob,
   listImages,
+  listTasks,
   nativePath,
   publish,
   submission,
@@ -41,6 +42,23 @@ const draft = () =>
   });
 afterEach(() => vi.unstubAllGlobals());
 describe("native images", () => {
+  it("loads search results using the native server's accepted sorting contract", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (path: string) => {
+        const url = new URL(path, "http://paperclip.test");
+        if (
+          !["updated", "id"].includes(url.searchParams.get("sortField") ?? "")
+        )
+          return json({ error: "Unsupported native issue sort field" }, 400);
+        expect(url.searchParams.get("q")).toBe("logo & header");
+        return json([{ id: issueId, companyId, title: "Logo and header" }]);
+      }),
+    );
+    expect(await listTasks(companyId, "logo & header")).toEqual([
+      { id: issueId, companyId, title: "Logo and header" },
+    ]);
+  });
   it.each([
     "https://evil.test/image.png",
     "//evil.test/image.png",

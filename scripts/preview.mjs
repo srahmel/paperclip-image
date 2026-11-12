@@ -61,9 +61,14 @@ const server = http.createServer(async (req, res) => {
   else if (
     req.method === "GET" &&
     url.pathname === `/api/companies/${companyId}/issues`
-  )
+  ) {
+    if (!["updated", "id"].includes(url.searchParams.get("sortField")))
+      return json(
+        { error: "sortField must be 'updated' or 'id' when provided" },
+        400,
+      );
     json([issue]);
-  else if (
+  } else if (
     req.method === "GET" &&
     url.pathname === `/api/issues/${issueId}/attachments`
   )

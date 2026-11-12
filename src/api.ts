@@ -84,7 +84,7 @@ export function listTasks(
   signal?: AbortSignal,
 ) {
   return api<Task[]>(
-    `/api/companies/${encodeURIComponent(companyId)}/issues?limit=50&q=${encodeURIComponent(search)}&sortField=updatedAt&sortDir=desc`,
+    `/api/companies/${encodeURIComponent(companyId)}/issues?limit=50&q=${encodeURIComponent(search)}&sortField=updated&sortDir=desc`,
     { signal },
   );
 }
