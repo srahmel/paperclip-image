@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   feedbackBody,
   fitView,
+  newId,
   reviewFilename,
   toImage,
   validImageSize,
@@ -9,6 +10,18 @@ import {
   type Mark,
 } from "../src/model.js";
 import { locale, translate } from "../src/i18n.js";
+it("creates a valid request UUID on plain-HTTP LAN origins", () => {
+  vi.stubGlobal("crypto", {
+    getRandomValues: (bytes: Uint8Array) => bytes.fill(7),
+  });
+  try {
+    expect(newId()).toMatch(
+      /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/,
+    );
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 describe("image coordinates", () => {
   it("keeps the exact image point under the cursor while zooming", () => {
     const view = { x: -320, y: 75, zoom: 2.5 },

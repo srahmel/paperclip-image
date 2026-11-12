@@ -13,6 +13,7 @@ import {
 } from "@paperclipai/plugin-sdk/ui";
 import {
   MAX_BYTES,
+  newId,
   RASTER_TYPES,
   clamp,
   fitView,
@@ -519,7 +520,7 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
       )
         return;
       mark = {
-        id: crypto.randomUUID(),
+        id: newId(),
         tool,
         color,
         width:
@@ -695,13 +696,7 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
           const token = ++generation.current;
           setLoading(true);
           try {
-            await load(
-              selected,
-              selected.name,
-              crypto.randomUUID(),
-              null,
-              token,
-            );
+            await load(selected, selected.name, newId(), null, token);
           } catch (e) {
             if (generation.current === token) setError((e as Error).message);
           } finally {

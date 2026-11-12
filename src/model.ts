@@ -12,6 +12,18 @@ export type Mark = {
 export type Review = { marks: Mark[]; note: string };
 export const MAX_BYTES = 20 * 1024 * 1024;
 export const MAX_PIXELS = 24_000_000;
+/** randomUUID is unavailable on plain-HTTP LAN origins; getRandomValues still works. */
+export function newId(): string {
+  if (typeof globalThis.crypto.randomUUID === "function")
+    return globalThis.crypto.randomUUID();
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 export const RASTER_TYPES = new Set([
   "image/png",
   "image/jpeg",

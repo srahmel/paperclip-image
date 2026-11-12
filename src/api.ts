@@ -1,5 +1,6 @@
 import {
   MAX_BYTES,
+  newId,
   RASTER_TYPES,
   feedbackBody,
   reviewFilename,
@@ -142,7 +143,7 @@ export type Submission = {
 export function submission(
   input: Omit<Submission, "requestId" | "filename">,
 ): Submission {
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   return {
     ...input,
     requestId,
