@@ -3,6 +3,7 @@ import {
   feedbackBody,
   fitView,
   newId,
+  taskReviewHref,
   reviewFilename,
   toImage,
   validImageSize,
@@ -10,6 +11,21 @@ import {
   type Mark,
 } from "../src/model.js";
 import { locale, translate } from "../src/i18n.js";
+describe("task toolbar navigation", () => {
+  it("recovers the organization prefix omitted by older toolbar contexts", () => {
+    expect(taskReviewHref(null, "/HUM/issues/HUM-10", "issue-1")).toBe(
+      "/HUM/image-review?issue=issue-1",
+    );
+  });
+  it("uses the explicit host prefix when it is available", () => {
+    expect(taskReviewHref("DEMO", "/OTHER/issues/id", "issue-1")).toBe(
+      "/DEMO/image-review?issue=issue-1",
+    );
+  });
+  it("does not create an unscoped organization URL", () => {
+    expect(taskReviewHref(null, "/issues/id", "issue-1")).toBeNull();
+  });
+});
 it("creates a valid request UUID on plain-HTTP LAN origins", () => {
   vi.stubGlobal("crypto", {
     getRandomValues: (bytes: Uint8Array) => bytes.fill(7),

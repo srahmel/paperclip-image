@@ -13,6 +13,7 @@ import {
 } from "@paperclipai/plugin-sdk/ui";
 import {
   MAX_BYTES,
+  taskReviewHref,
   newId,
   RASTER_TYPES,
   clamp,
@@ -85,18 +86,20 @@ export function ImageReviewSidebar() {
 }
 export function ImageReviewButton() {
   const context = useHostContext(),
+    location = useHostLocation(),
     navigation = useHostNavigation(),
     t = useLanguage();
   if (context.entityType !== "issue" || !context.entityId) return null;
+  const href = taskReviewHref(
+    context.companyPrefix,
+    location.pathname,
+    context.entityId,
+  );
+  if (!href) return null;
   return (
     <>
       <Styles />
-      <a
-        className="ir-link"
-        {...navigation.linkProps(
-          `/image-review?issue=${encodeURIComponent(context.entityId)}`,
-        )}
-      >
+      <a className="ir-link" {...navigation.linkProps(href)}>
         <ImageIcon />
         {t("Review images")}
       </a>

@@ -12,6 +12,17 @@ export type Mark = {
 export type Review = { marks: Mark[]; note: string };
 export const MAX_BYTES = 20 * 1024 * 1024;
 export const MAX_PIXELS = 24_000_000;
+/** Task toolbar slots in older hosts omit companyPrefix from their SDK context. */
+export function taskReviewHref(
+  companyPrefix: string | null,
+  pathname: string,
+  issueId: string,
+): string | null {
+  const prefix =
+    companyPrefix || /^\/([^/]+)\/issues(?:\/|$)/.exec(pathname)?.[1];
+  if (!prefix) return null;
+  return `/${encodeURIComponent(prefix)}/image-review?issue=${encodeURIComponent(issueId)}`;
+}
 /** randomUUID is unavailable on plain-HTTP LAN origins; getRandomValues still works. */
 export function newId(): string {
   if (typeof globalThis.crypto.randomUUID === "function")

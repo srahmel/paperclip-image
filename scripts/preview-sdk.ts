@@ -10,9 +10,14 @@ export function useHostContext() {
 export function useHostLocation() {
   const [value, setValue] = useState(() => ({
     search: window.location.search,
+    pathname: window.location.pathname,
   }));
   useEffect(() => {
-    const fn = () => setValue({ search: window.location.search });
+    const fn = () =>
+      setValue({
+        search: window.location.search,
+        pathname: window.location.pathname,
+      });
     window.addEventListener("popstate", fn);
     return () => window.removeEventListener("popstate", fn);
   }, []);
