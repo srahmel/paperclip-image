@@ -43,6 +43,8 @@ import {
 import { drawMarks, renderPng } from "../drawing.js";
 import { locale, translate } from "../i18n.js";
 import css from "./styles.css";
+import { Undo2, Redo2, Minus, Plus, Scan, Eye } from "lucide-react";
+import { IconButton, ToolButtons, toolLabels } from "./Toolbar.js";
 
 function useLanguage() {
   const [language, setLanguage] = useState(() =>
@@ -150,13 +152,6 @@ type Source = {
   blob: Blob;
   url: string;
   animated: boolean;
-};
-const toolLabels: Record<Tool, string> = {
-  pan: "Pan",
-  pen: "Pen",
-  arrow: "Arrow",
-  rect: "Rectangle",
-  pin: "Numbered pin",
 };
 const colors = [
   ["Red", "#ef4444"],
@@ -871,40 +866,32 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
       <div className="ir-layout">
         <section className="ir-workbench" aria-label={t("Image controls")}>
           <div className="ir-toolbar">
-            <div
-              className="ir-tools"
-              role="group"
-              aria-label={t("Drawing tools")}
-            >
-              {(Object.keys(toolLabels) as Tool[]).map((key) => (
-                <button
-                  key={key}
-                  disabled={!source || locked}
-                  aria-pressed={key === tool}
-                  onClick={() => {
-                    setTool(key);
-                    if (key !== "pan") setOriginal(false);
-                  }}
-                >
-                  {t(toolLabels[key])}
-                </button>
-              ))}
-            </div>
+            <ToolButtons
+              tool={tool}
+              disabled={!source || locked}
+              t={t}
+              onSelect={(key) => {
+                setTool(key);
+                if (key !== "pan") setOriginal(false);
+              }}
+            />
             <div className="ir-spacer" />
-            <button
+            <IconButton
               disabled={!review.marks.length || locked}
               onClick={undo}
-              title={t("Undo")}
+              label={t("Undo")}
+              shortcut={t("Ctrl/Cmd+Z")}
             >
-              ↶ {t("Undo")}
-            </button>
-            <button
+              <Undo2 size={20} aria-hidden="true" />
+            </IconButton>
+            <IconButton
               disabled={!redo.length || locked}
               onClick={redoMark}
-              title={t("Redo")}
+              label={t("Redo")}
+              shortcut={t("Ctrl/Cmd+Shift+Z")}
             >
-              ↷
-            </button>
+              <Redo2 size={20} aria-hidden="true" />
+            </IconButton>
           </div>
           <div className="ir-toolbar">
             <div className="ir-group" role="group" aria-label={t("Color")}>
@@ -935,27 +922,35 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
                 ))}
               </select>
             </div>
-            <button
+            <IconButton
               disabled={!source}
-              aria-label={t("Zoom out")}
+              label={t("Zoom out")}
+              shortcut="−"
               onClick={() => zoom(0.8)}
             >
-              −
-            </button>
+              <Minus size={18} aria-hidden="true" />
+            </IconButton>
             <output aria-label="Zoom">{Math.round(view.zoom * 100)}%</output>
-            <button
+            <IconButton
               disabled={!source}
-              aria-label={t("Zoom in")}
+              label={t("Zoom in")}
+              shortcut="+"
               onClick={() => zoom(1.25)}
             >
-              +
-            </button>
-            <button disabled={!source} onClick={fit}>
-              {t("Fit")}
-            </button>
+              <Plus size={18} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              disabled={!source}
+              onClick={fit}
+              label={t("Fit")}
+              shortcut="F"
+            >
+              <Scan size={18} aria-hidden="true" />
+            </IconButton>
             <button
               disabled={!source}
               title={t("Actual size")}
+              aria-label={t("Actual size")}
               onClick={() => {
                 fitted.current = false;
                 const area = viewport.current!;
@@ -971,13 +966,14 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
               100%
             </button>
             <div className="ir-spacer" />
-            <button
+            <IconButton
               disabled={!source}
               aria-pressed={original}
+              label={t("Show original")}
               onClick={() => setOriginal((v) => !v)}
             >
-              {t("Show original")}
-            </button>
+              <Eye size={20} aria-hidden="true" />
+            </IconButton>
           </div>
           <div
             className="ir-viewport"
@@ -1184,7 +1180,7 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
       <footer className="ir-footer ir-subtle">
         <p>
           {t(
-            "Use the wheel to zoom. Drag with Pan to move; touch supports two-finger zoom. Shortcuts: V pan, P pen, A arrow, R rectangle, N pin, +/− zoom, F fit, Ctrl/Cmd+Z undo.",
+            "Use the wheel to zoom. Drag with Move to pan; touch supports two-finger zoom. Shortcuts: V move, P pen, A arrow, R rectangle, N pin, +/− zoom, F fit, Ctrl/Cmd+Z undo.",
           )}
         </p>
         <p>

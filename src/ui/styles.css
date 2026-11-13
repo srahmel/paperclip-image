@@ -170,6 +170,16 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+.ir .ir-icon-button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.ir-icon-button svg {
+  pointer-events: none;
+}
 .ir-toolbar .ir-group {
   display: flex;
   gap: 4px;

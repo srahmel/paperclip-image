@@ -16,7 +16,9 @@ const de: Record<string, string> = {
   "Change task": "Aufgabe wechseln",
   "Refresh images": "Bilder aktualisieren",
   "Choose an image to start.": "Wähle ein Bild aus.",
-  Pan: "Verschieben",
+  Move: "Verschieben",
+  "Ctrl/Cmd+Z": "Strg/Cmd+Z",
+  "Ctrl/Cmd+Shift+Z": "Strg/Cmd+Umschalt+Z",
   Pen: "Stift",
   Arrow: "Pfeil",
   Rectangle: "Rechteck",
@@ -63,7 +65,7 @@ const de: Record<string, string> = {
   "Select your organization.": "Wähle deine Organisation aus.",
   "Choose a task to attach feedback, or open a local image to annotate and download.":
     "Wähle eine Aufgabe für deinen Änderungswunsch oder öffne ein lokales Bild zum Markieren und Herunterladen.",
-  "Use the wheel to zoom. Drag with Pan to move; touch supports two-finger zoom. Shortcuts: V pan, P pen, A arrow, R rectangle, N pin, +/− zoom, F fit, Ctrl/Cmd+Z undo.":
+  "Use the wheel to zoom. Drag with Move to pan; touch supports two-finger zoom. Shortcuts: V move, P pen, A arrow, R rectangle, N pin, +/− zoom, F fit, Ctrl/Cmd+Z undo.":
     "Mausrad zum Zoomen, mit Verschieben ziehen; auf Touchgeräten mit zwei Fingern zoomen. Tastenkürzel: V verschieben, P Stift, A Pfeil, R Rechteck, N Punkt, +/− Zoom, F einpassen, Strg/Cmd+Z rückgängig.",
   "Images must be 20 MB or smaller.":
     "Bilder dürfen höchstens 20 MB groß sein.",

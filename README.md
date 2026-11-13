@@ -9,6 +9,7 @@ A Paperclip plugin for inspecting images and giving precise visual feedback to t
 - Load native task image attachments, or open a local image.
 - Wheel zoom, pan, fit-to-window, actual size, and two-finger touch zoom.
 - Freehand pen, arrows, rectangles, numbered pins, five ink colors, and stroke widths.
+- A compact Lucide icon toolbar: hand for Move, pencil for Pen, distinct shape tools, and accessible name/shortcut tooltips.
 - Undo/redo, per-mark notes, and an original/annotated toggle.
 - Download a full-resolution annotated PNG and an inspectable JSON record of the review.
 - Send a PNG and change description to the original task using native attachment and comment APIs. Local images include an original upload too.
@@ -58,7 +59,7 @@ Rebuild/reload the host UI using its normal deployment procedure. Keeping existi
 
 The narrow extension contract is the optional `imageGallery` component prop on an issue `toolbarButton` contribution: `{ id, contentPath, contentType, originalFilename }`. The plugin still receives ordinary company/issue scope through the public SDK bridge. Gallery deep links only select an image from the current task's authorized attachment list; query parameters never authorize a separate fetch.
 
-Shortcuts: **V** pan, **P** pen, **A** arrow, **R** rectangle, **N** pin, **F** fit, **+ / −** zoom, **Ctrl/Cmd+Z** undo, **Ctrl/Cmd+Shift+Z** redo. Typing in text fields does not trigger these shortcuts.
+The hand icon is **Move**; the pencil icon is **Pen**. Hover a tool for its name and shortcut. The active tool is visibly pressed, and all icon buttons retain accessible labels. Shortcuts: **V** move/pan, **P** pen, **A** arrow, **R** rectangle, **N** pin, **F** fit, **+ / −** zoom, **Ctrl/Cmd+Z** undo, **Ctrl/Cmd+Shift+Z** redo. Typing in text fields does not trigger these shortcuts.
 
 ## Privacy and reliability
 
@@ -90,4 +91,4 @@ The preview listens only on `127.0.0.1:3108` with synthetic task/image data and 
 
 ## License
 
-Free and open source under the [MIT license](LICENSE), including commercial use, modification, and redistribution. Dependency licenses apply to their respective packages. There is no paid image-processing service required by this plugin.
+Free and open source under the [MIT license](LICENSE), including commercial use, modification, and redistribution. Icons are from [Lucide (ISC)](licenses/lucide.txt), the icon family also used by Paperclip. Other dependency licenses apply to their respective packages. There is no paid image-processing service required by this plugin.
