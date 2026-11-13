@@ -15,7 +15,8 @@ import {
   MAX_BYTES,
   taskReviewHref,
   newId,
-  RASTER_TYPES,
+  rasterContentType,
+  rasterBytesType,
   clamp,
   fitView,
   toImage,
@@ -84,24 +85,42 @@ export function ImageReviewSidebar() {
     </>
   );
 }
-export function ImageReviewButton() {
+/** Optional gallery props are supplied by Paperclip's contextual toolbar mount. */
+export function ImageReviewButton({
+  imageGallery,
+}: {
+  imageGallery?: {
+    id: string;
+    contentPath: string;
+    contentType: string;
+    originalFilename: string | null;
+  };
+} = {}) {
   const context = useHostContext(),
     location = useHostLocation(),
     navigation = useHostNavigation(),
     t = useLanguage();
   if (context.entityType !== "issue" || !context.entityId) return null;
-  const href = taskReviewHref(
+  const taskHref = taskReviewHref(
     context.companyPrefix,
     location.pathname,
     context.entityId,
   );
-  if (!href) return null;
+  if (!taskHref) return null;
+  if (
+    imageGallery &&
+    !rasterContentType(imageGallery.contentType, imageGallery.originalFilename)
+  )
+    return null;
+  const href = imageGallery
+    ? `${taskHref}&image=${encodeURIComponent(imageGallery.contentPath)}`
+    : taskHref;
   return (
     <>
       <Styles />
       <a className="ir-link" {...navigation.linkProps(href)}>
         <ImageIcon />
-        {t("Review images")}
+        {t(imageGallery ? "Annotate image" : "Review images")}
       </a>
     </>
   );
@@ -172,6 +191,8 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
     location = useHostLocation(),
     navigation = useHostNavigation();
   const issueId = new URLSearchParams(location.search).get("issue") ?? "";
+  const requestedImage = new URLSearchParams(location.search).get("image");
+  const selectionAttempt = useRef("");
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]),
     [search, setSearch] = useState("");
@@ -420,6 +441,15 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
   ) {
     if (blob.size > MAX_BYTES)
       throw new Error("Images must be 20 MB or smaller.");
+    const detectedType = rasterBytesType(
+      new Uint8Array(await blob.slice(0, 12).arrayBuffer()),
+    );
+    if (!detectedType)
+      throw new Error("Use a PNG, JPEG, WebP, GIF, or BMP image.");
+    blob =
+      blob.type === detectedType
+        ? blob
+        : new Blob([blob], { type: detectedType });
     const url = URL.createObjectURL(blob),
       image = new Image();
     image.src = url;
@@ -479,6 +509,18 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
       if (generation.current === token) setLoading(false);
     }
   }
+  useEffect(() => {
+    if (!requestedImage || source) return;
+    const selected = images.find(
+      (image) =>
+        image.id === requestedImage || image.contentPath === requestedImage,
+    );
+    const key = `${companyId}:${issueId}:${requestedImage}`;
+    if (!selected || selectionAttempt.current === key) return;
+    selectionAttempt.current = key;
+    void choose(selected);
+    // Selection is accepted only from the current task's authorized attachment list.
+  }, [companyId, issueId, requestedImage, images, source]);
   function point(event: ReactPointerEvent): Point {
     const bounds = viewport.current!.getBoundingClientRect();
     return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
@@ -692,7 +734,7 @@ function ReviewPage({ companyId }: { companyId: string | null }) {
           const selected = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
           if (!selected || !confirmSwitch()) return;
-          if (!RASTER_TYPES.has(selected.type)) {
+          if (!rasterContentType(selected.type, selected.name)) {
             setError("Use a PNG, JPEG, WebP, GIF, or BMP image.");
             return;
           }

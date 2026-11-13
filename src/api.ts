@@ -1,7 +1,7 @@
 import {
   MAX_BYTES,
   newId,
-  RASTER_TYPES,
+  rasterContentType,
   feedbackBody,
   reviewFilename,
   type Review,
@@ -102,7 +102,7 @@ export async function listImages(
     (a) =>
       a.companyId === companyId &&
       a.issueId === issueId &&
-      RASTER_TYPES.has(a.contentType),
+      Boolean(rasterContentType(a.contentType, a.originalFilename)),
   );
 }
 export async function imageBlob(attachment: Attachment, signal?: AbortSignal) {

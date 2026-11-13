@@ -27,6 +27,7 @@
   },
   "files": [
     "dist",
+    "patches",
     "README.md",
     "LICENSE"
   ],

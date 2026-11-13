@@ -1,4 +1,5 @@
 const de: Record<string, string> = {
+  "Annotate image": "Bild markieren",
   "Image review": "Bildprüfung",
   "Review images": "Bilder prüfen",
   "Zoom in, mark what needs changing, and send clear feedback to the task.":

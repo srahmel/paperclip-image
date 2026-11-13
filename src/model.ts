@@ -42,6 +42,50 @@ export const RASTER_TYPES = new Set([
   "image/gif",
   "image/bmp",
 ]);
+/** Older agent uploads use a generic binary MIME type even for PNG/JPEG files. */
+export function rasterContentType(
+  contentType: string,
+  filename?: string | null,
+): string | null {
+  const type = contentType.split(";")[0].trim().toLowerCase();
+  if (RASTER_TYPES.has(type)) return type;
+  if (
+    type &&
+    ![
+      "application/octet-stream",
+      "binary/octet-stream",
+      "application/x-binary",
+    ].includes(type)
+  )
+    return null;
+  const extension = filename?.match(/\.([^.]+)$/)?.[1].toLowerCase();
+  return extension
+    ? ((
+        {
+          png: "image/png",
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          webp: "image/webp",
+          gif: "image/gif",
+          bmp: "image/bmp",
+        } as Record<string, string>
+      )[extension] ?? null)
+    : null;
+}
+/** Confirm raster file signatures before decoding a legacy binary attachment. */
+export function rasterBytesType(bytes: Uint8Array): string | null {
+  if ([137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => bytes[i] === v))
+    return "image/png";
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255)
+    return "image/jpeg";
+  const text = String.fromCharCode(...bytes);
+  if (text.startsWith("GIF87a") || text.startsWith("GIF89a"))
+    return "image/gif";
+  if (text.startsWith("RIFF") && text.slice(8, 12) === "WEBP")
+    return "image/webp";
+  if (text.startsWith("BM")) return "image/bmp";
+  return null;
+}
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }

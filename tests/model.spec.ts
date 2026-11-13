@@ -4,6 +4,8 @@ import {
   fitView,
   newId,
   taskReviewHref,
+  rasterContentType,
+  rasterBytesType,
   reviewFilename,
   toImage,
   validImageSize,
@@ -11,6 +13,32 @@ import {
   type Mark,
 } from "../src/model.js";
 import { locale, translate } from "../src/i18n.js";
+describe("legacy image uploads", () => {
+  it("recognizes PNG/JPEG filenames on generic binary uploads", () => {
+    expect(
+      rasterContentType("application/octet-stream", "index-1440-full.png"),
+    ).toBe("image/png");
+    expect(rasterContentType("", "Photo.JPG")).toBe("image/jpeg");
+    expect(rasterContentType("image/png; charset=binary", "photo")).toBe(
+      "image/png",
+    );
+  });
+  it("rejects SVG and explicit non-image MIME types", () => {
+    expect(
+      rasterContentType("application/octet-stream", "image.svg"),
+    ).toBeNull();
+    expect(rasterContentType("text/html", "image.png")).toBeNull();
+  });
+  it("checks actual raster bytes instead of trusting a filename", () => {
+    expect(
+      rasterBytesType(Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])),
+    ).toBe("image/png");
+    expect(rasterBytesType(Uint8Array.from([255, 216, 255]))).toBe(
+      "image/jpeg",
+    );
+    expect(rasterBytesType(new TextEncoder().encode("<svg />"))).toBeNull();
+  });
+});
 describe("task toolbar navigation", () => {
   it("recovers the organization prefix omitted by older toolbar contexts", () => {
     expect(taskReviewHref(null, "/HUM/issues/HUM-10", "issue-1")).toBe(

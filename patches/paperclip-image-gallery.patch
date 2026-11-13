@@ -1,0 +1,871 @@
+From c645b7795b5665eaafb3a30fe23e2deb0811dc6e Mon Sep 17 00:00:00 2001
+From: srahmel <s.rahmel@encurio.com>
+Date: Fri, 13 Nov 2026 01:24:04 +0100
+Subject: [PATCH] feat: add native gallery zoom and contextual image review
+
+---
+ maps/feature-map/documents-artifacts.md       |  10 +
+ ui/src/components/ImageGalleryModal.test.tsx  | 180 +++++++++++++++++-
+ ui/src/components/ImageGalleryModal.tsx       | 143 ++++++++++++--
+ ui/src/components/ImageGalleryViewport.tsx    | 180 ++++++++++++++++++
+ .../IssueImageGalleryActions.test.tsx         |  83 ++++++++
+ .../components/IssueImageGalleryActions.tsx   |  46 +++++
+ ui/src/context/ImageGalleryToolbarContext.ts  |   7 +
+ ui/src/pages/IssueDetail.tsx                  |   9 +
+ 8 files changed, 632 insertions(+), 26 deletions(-)
+ create mode 100644 ui/src/components/ImageGalleryViewport.tsx
+ create mode 100644 ui/src/components/IssueImageGalleryActions.test.tsx
+ create mode 100644 ui/src/components/IssueImageGalleryActions.tsx
+ create mode 100644 ui/src/context/ImageGalleryToolbarContext.ts
+
+diff --git a/maps/feature-map/documents-artifacts.md b/maps/feature-map/documents-artifacts.md
+index 4401e3090d..1f23a75a46 100644
+--- a/maps/feature-map/documents-artifacts.md
++++ b/maps/feature-map/documents-artifacts.md
+@@ -29,6 +29,9 @@ Open a document from the task thread or document side panel.
+ ### `task-output`
+ 
+ Open an attachment, output card, or file link from a task.
++Image previews open a gallery with wheel zoom, drag-to-pan, Fit, and actual size.
++Installed issue toolbar plugins receive the selected image as `imageGallery`
++props, so an image review action can open that exact attachment for annotation.
+ For direct uploads, use the task side panel's **Open a new tab → Artifacts →
+ Upload files** or drop files anywhere in that panel. On mobile, open
+ **More actions → Properties** first. Agent conversations do not expose this upload path.
+@@ -51,6 +54,13 @@ Manual: Edit a paragraph, save, reload, and compare revisions. Add an annotation
+ 
+ Automated: [attachment routes](../../server/src/__tests__/issue-attachment-routes.test.ts) and [work products](../../server/src/__tests__/work-products.test.ts) cover data/access behavior; [artifact arrival browser suite](../../tests/e2e/artifact-tab-arrival.spec.ts) targets arrival. [Artifact uploads](../../tests/e2e/artifact-uploads.spec.ts) drives file selection/drop, filename collisions, retry, and preservation of paused/unassigned tasks.
+ 
++[Gallery controls](../../ui/src/components/ImageGalleryModal.test.tsx) cover
++zoom, pan, navigation, and selected-image toolbar context;
++[gallery plugin actions](../../ui/src/components/IssueImageGalleryActions.test.tsx)
++cover issue/company scope, generic-binary image uploads, and absent plugins.
++Verify wheel zoom and the optional annotation handoff against a real task image,
++including multiple revisions with identical filenames.
++
+ Manual: Upload a small Markdown file and CSV through Artifacts. Markdown becomes
+ a versioned task document; other files become attachments. Read the document,
+ download the CSV and compare bytes, then reload. Upload the same Markdown filename
+diff --git a/ui/src/components/ImageGalleryModal.test.tsx b/ui/src/components/ImageGalleryModal.test.tsx
+index 6fbf0b49d2..d11f680d2d 100644
+--- a/ui/src/components/ImageGalleryModal.test.tsx
++++ b/ui/src/components/ImageGalleryModal.test.tsx
+@@ -1,19 +1,18 @@
+ // @vitest-environment jsdom
+ 
+ import { createRoot, type Root } from "react-dom/client";
+-import { flushSync } from "react-dom";
++import { act as reactAct } from "react";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { ImageGalleryModal, type GalleryMediaItem } from "./ImageGalleryModal";
++import { ImageGalleryToolbarContext } from "@/context/ImageGalleryToolbarContext";
+ 
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+ 
+-async function act(callback: () => void | Promise<void>) {
+-  let result: void | Promise<void> = undefined;
+-  flushSync(() => {
+-    result = callback();
++async function act(callback: () => unknown) {
++  await reactAct(async () => {
++    await callback();
+   });
+-  await result;
+ }
+ 
+ async function flushReact() {
+@@ -23,7 +22,9 @@ async function flushReact() {
+   });
+ }
+ 
+-function makeMediaItem(overrides: Partial<GalleryMediaItem> = {}): GalleryMediaItem {
++function makeMediaItem(
++  overrides: Partial<GalleryMediaItem> = {},
++): GalleryMediaItem {
+   return {
+     id: "media-1",
+     contentPath: "/api/attachments/media-1/content",
+@@ -40,6 +41,13 @@ describe("ImageGalleryModal", () => {
+   let root: Root;
+ 
+   beforeEach(() => {
++    vi.stubGlobal(
++      "ResizeObserver",
++      class {
++        observe() {}
++        disconnect() {}
++      },
++    );
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     root = createRoot(container);
+@@ -50,6 +58,7 @@ describe("ImageGalleryModal", () => {
+       root.unmount();
+     });
+     document.body.innerHTML = "";
++    vi.unstubAllGlobals();
+   });
+ 
+   it("renders video media with a download link in the gallery", async () => {
+@@ -74,13 +83,166 @@ describe("ImageGalleryModal", () => {
+     await flushReact();
+ 
+     const renderedVideo = document.body.querySelector("video");
+-    expect(renderedVideo?.getAttribute("src")).toBe("/api/attachments/video-1/content");
++    expect(renderedVideo?.getAttribute("src")).toBe(
++      "/api/attachments/video-1/content",
++    );
+     expect(renderedVideo?.getAttribute("controls")).not.toBeNull();
++    expect(document.body.querySelector('[aria-label="Image zoom"]')).toBeNull();
+     expect(
+-      document.body.querySelector('a[aria-label="Download demo.webm"]')?.getAttribute("href"),
++      document.body
++        .querySelector('a[aria-label="Download demo.webm"]')
++        ?.getAttribute("href"),
+     ).toBe("/api/attachments/video-1/content?download=1");
+   });
+ 
++  it("zooms at actual size and fits a tall screenshot without closing the viewer", async () => {
++    const onOpenChange = vi.fn();
++    await act(() =>
++      root.render(
++        <ImageGalleryModal
++          items={[makeMediaItem()]}
++          initialIndex={0}
++          open
++          onOpenChange={onOpenChange}
++        />,
++      ),
++    );
++    await flushReact();
++    const viewport = document.body.querySelector<HTMLDivElement>(
++      "[data-image-gallery-viewport]",
++    )!;
++    const image = viewport.querySelector("img")!;
++    Object.defineProperties(viewport, {
++      clientWidth: { value: 600 },
++      clientHeight: { value: 500 },
++    });
++    Object.defineProperties(image, {
++      naturalWidth: { value: 1200 },
++      naturalHeight: { value: 2000 },
++    });
++    await act(() => image.dispatchEvent(new Event("load")));
++    expect(document.body.querySelector("output")?.textContent).toBe("25%");
++    await act(() =>
++      document.body
++        .querySelector<HTMLButtonElement>('[aria-label="Actual size"]')!
++        .click(),
++    );
++    expect(document.body.querySelector("output")?.textContent).toBe("100%");
++    expect(image.style.transform).toContain("scale(1)");
++    await act(() =>
++      viewport.dispatchEvent(
++        new WheelEvent("wheel", {
++          deltaY: -100,
++          bubbles: true,
++          cancelable: true,
++          clientX: 100,
++          clientY: 100,
++        }),
++      ),
++    );
++    expect(
++      Number(
++        document.body.querySelector("output")?.textContent?.replace("%", ""),
++      ),
++    ).toBeGreaterThan(100);
++    await act(() => viewport.click());
++    expect(onOpenChange).not.toHaveBeenCalled();
++    await act(() =>
++      [...document.body.querySelectorAll("button")]
++        .find((b) => b.textContent === "Fit")!
++        .click(),
++    );
++    expect(document.body.querySelector("output")?.textContent).toBe("25%");
++  });
++
++  it("pans a zoomed image without changing its scale", async () => {
++    await act(() =>
++      root.render(
++        <ImageGalleryModal
++          items={[makeMediaItem()]}
++          initialIndex={0}
++          open
++          onOpenChange={() => undefined}
++        />,
++      ),
++    );
++    await flushReact();
++    const viewport = document.body.querySelector<HTMLDivElement>(
++      "[data-image-gallery-viewport]",
++    )!;
++    const image = viewport.querySelector("img")!;
++    Object.defineProperties(viewport, {
++      clientWidth: { value: 600 },
++      clientHeight: { value: 500 },
++    });
++    Object.defineProperties(image, {
++      naturalWidth: { value: 1200 },
++      naturalHeight: { value: 2000 },
++    });
++    viewport.setPointerCapture = vi.fn();
++    await act(() => image.dispatchEvent(new Event("load")));
++    await act(() =>
++      document.body
++        .querySelector<HTMLButtonElement>('[aria-label="Actual size"]')!
++        .click(),
++    );
++    const before = image.style.transform;
++    const pointer = (type: string, x: number, y: number) => {
++      const event = new MouseEvent(type, {
++        bubbles: true,
++        cancelable: true,
++        clientX: x,
++        clientY: y,
++        button: 0,
++      });
++      Object.defineProperty(event, "pointerId", { value: 1 });
++      return event;
++    };
++    await act(() => viewport.dispatchEvent(pointer("pointerdown", 100, 100)));
++    await act(() => viewport.dispatchEvent(pointer("pointermove", 180, 130)));
++    await act(() => viewport.dispatchEvent(pointer("pointerup", 180, 130)));
++    expect(image.style.transform).not.toBe(before);
++    expect(image.style.transform).toContain("scale(1)");
++  });
++
++  it("passes the currently selected image to contextual plugin actions", async () => {
++    const first = makeMediaItem({
++      id: "first",
++      contentPath: "/api/attachments/first/content",
++    });
++    const second = makeMediaItem({
++      id: "second",
++      contentPath: "/api/attachments/second/content",
++    });
++    await act(() =>
++      root.render(
++        <ImageGalleryToolbarContext.Provider
++          value={(item) => (
++            <a href={`/review?image=${item.id}`}>Annotate image</a>
++          )}
++        >
++          <ImageGalleryModal
++            items={[first, second]}
++            initialIndex={0}
++            open
++            onOpenChange={() => undefined}
++          />
++        </ImageGalleryToolbarContext.Provider>,
++      ),
++    );
++    await flushReact();
++    expect(
++      document.body.querySelector('a[href="/review?image=first"]'),
++    ).not.toBeNull();
++    await act(() =>
++      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" })),
++    );
++    expect(
++      document.body.querySelector('a[href="/review?image=second"]'),
++    ).not.toBeNull();
++    expect(document.body.querySelector("output")?.textContent).toBe("100%");
++  });
++
+   it("supports keyboard navigation and Escape close", async () => {
+     const onOpenChange = vi.fn();
+     const first = makeMediaItem({
+diff --git a/ui/src/components/ImageGalleryModal.tsx b/ui/src/components/ImageGalleryModal.tsx
+index 72e0fafd80..0b9dabb4bd 100644
+--- a/ui/src/components/ImageGalleryModal.tsx
++++ b/ui/src/components/ImageGalleryModal.tsx
+@@ -1,8 +1,27 @@
+-import { useCallback, useEffect, useRef, useState } from "react";
++import {
++  useCallback,
++  useContext,
++  useEffect,
++  useRef,
++  useState,
++  type ReactNode,
++} from "react";
+ import { Dialog as DialogPrimitive } from "radix-ui";
+-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+-import { attachmentDownloadPath, attachmentFilename } from "@/lib/issue-attachments";
++import {
++  ChevronLeft,
++  ChevronRight,
++  Download,
++  Minus,
++  Plus,
++  X,
++} from "lucide-react";
++import {
++  attachmentDownloadPath,
++  attachmentFilename,
++} from "@/lib/issue-attachments";
+ import { isVideoLikeOutput } from "@/lib/issue-output";
++import { ImageGalleryToolbarContext } from "@/context/ImageGalleryToolbarContext";
++import { useGalleryImageView } from "./ImageGalleryViewport";
+ 
+ export interface GalleryMediaItem {
+   id: string;
+@@ -18,6 +37,7 @@ interface ImageGalleryModalProps {
+   initialIndex: number;
+   open: boolean;
+   onOpenChange: (open: boolean) => void;
++  renderToolbar?: (item: GalleryMediaItem) => ReactNode;
+ }
+ 
+ export function ImageGalleryModal({
+@@ -25,12 +45,21 @@ export function ImageGalleryModal({
+   initialIndex,
+   open,
+   onOpenChange,
++  renderToolbar,
+ }: ImageGalleryModalProps) {
+   const [currentIndex, setCurrentIndex] = useState(initialIndex);
++  const galleryToolbar = useContext(ImageGalleryToolbarContext);
++  const imageView = useGalleryImageView(
++    items[currentIndex]?.contentPath ?? "",
++    open,
++  );
+   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
+-  const setMediaRef = useCallback((node: HTMLImageElement | HTMLVideoElement | null) => {
+-    mediaRef.current = node;
+-  }, []);
++  const setMediaRef = useCallback(
++    (node: HTMLImageElement | HTMLVideoElement | null) => {
++      mediaRef.current = node;
++    },
++    [],
++  );
+ 
+   useEffect(() => {
+     if (open) setCurrentIndex(initialIndex);
+@@ -67,6 +96,7 @@ export function ImageGalleryModal({
+       if (
+         target.closest("button") ||
+         target.closest("a") ||
++        target.closest("[data-image-gallery-viewport]") ||
+         target === mediaRef.current
+       )
+         return;
+@@ -80,7 +110,10 @@ export function ImageGalleryModal({
+   const current = items[currentIndex];
+   if (!current) return null;
+   const filename = attachmentFilename(current);
+-  const isVideo = isVideoLikeOutput(current.contentType, current.originalFilename);
++  const isVideo = isVideoLikeOutput(
++    current.contentType,
++    current.originalFilename,
++  );
+ 
+   return (
+     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+@@ -91,12 +124,64 @@ export function ImageGalleryModal({
+           className="fixed inset-0 z-50 flex flex-col outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200"
+           onClick={handleBackdropClick}
+         >
++          <DialogPrimitive.Title className="sr-only">
++            Image gallery
++          </DialogPrimitive.Title>
+           {/* Top bar */}
+-          <div className="flex items-center justify-between px-5 py-3 text-white/80 text-sm shrink-0">
+-            <span className="truncate max-w-(--pct-50) font-medium" title={filename}>
++          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-white/80 text-sm shrink-0">
++            <span
++              className="truncate max-w-(--pct-50) font-medium shrink"
++              title={filename}
++            >
+               {filename}
+             </span>
+-            <div className="flex items-center gap-4">
++            <div className="flex flex-wrap items-center gap-2 max-w-full">
++              {!isVideo ? (
++                <div
++                  className="flex items-center gap-1"
++                  role="group"
++                  aria-label="Image zoom"
++                >
++                  <button
++                    type="button"
++                    className="rounded-md p-2 hover:bg-white/10"
++                    aria-label="Zoom out"
++                    onClick={() => imageView.zoom(0.8)}
++                  >
++                    <Minus className="h-4 w-4" />
++                  </button>
++                  <output
++                    className="text-xs tabular-nums"
++                    aria-label="Image zoom level"
++                  >
++                    {Math.round(imageView.view.scale * 100)}%
++                  </output>
++                  <button
++                    type="button"
++                    className="rounded-md p-2 hover:bg-white/10"
++                    aria-label="Zoom in"
++                    onClick={() => imageView.zoom(1.25)}
++                  >
++                    <Plus className="h-4 w-4" />
++                  </button>
++                  <button
++                    type="button"
++                    className="rounded-md p-2 text-xs hover:bg-white/10"
++                    onClick={imageView.fit}
++                  >
++                    Fit
++                  </button>
++                  <button
++                    type="button"
++                    className="rounded-md p-2 text-xs hover:bg-white/10"
++                    aria-label="Actual size"
++                    onClick={imageView.actualSize}
++                  >
++                    100%
++                  </button>
++                </div>
++              ) : null}
++              {!isVideo ? (renderToolbar ?? galleryToolbar)?.(current) : null}
+               <span className="text-white/40 tabular-nums text-xs">
+                 {currentIndex + 1} / {items.length}
+               </span>
+@@ -148,13 +233,37 @@ export function ImageGalleryModal({
+                   playsInline
+                 />
+               ) : (
+-                <img
+-                  ref={setMediaRef}
+-                  src={current.contentPath}
+-                  alt={filename}
+-                  className="max-w-full max-h-full object-contain select-none rounded-lg"
+-                  draggable={false}
+-                />
++                <div
++                  ref={imageView.attachViewport}
++                  className="relative h-full w-full overflow-hidden touch-none cursor-grab active:cursor-grabbing"
++                  data-image-gallery-viewport
++                  aria-label="Image viewport"
++                  role="region"
++                  tabIndex={0}
++                  onPointerDown={imageView.onPointerDown}
++                  onPointerMove={imageView.onPointerMove}
++                  onPointerUp={imageView.onPointerEnd}
++                  onPointerCancel={imageView.onPointerEnd}
++                  onLostPointerCapture={imageView.onPointerEnd}
++                  onDoubleClick={() =>
++                    imageView.view.scale === 1
++                      ? imageView.fit()
++                      : imageView.actualSize()
++                  }
++                >
++                  <img
++                    key={current.contentPath}
++                    ref={setMediaRef}
++                    src={current.contentPath}
++                    alt={filename}
++                    className="absolute left-0 top-0 max-w-none max-h-none select-none rounded-lg origin-top-left"
++                    style={{
++                      transform: `translate(${imageView.view.x}px, ${imageView.view.y}px) scale(${imageView.view.scale})`,
++                    }}
++                    onLoad={(event) => imageView.onLoad(event.currentTarget)}
++                    draggable={false}
++                  />
++                </div>
+               )}
+             </div>
+ 
+diff --git a/ui/src/components/ImageGalleryViewport.tsx b/ui/src/components/ImageGalleryViewport.tsx
+new file mode 100644
+index 0000000000..aa2c92c5b2
+--- /dev/null
++++ b/ui/src/components/ImageGalleryViewport.tsx
+@@ -0,0 +1,180 @@
++import {
++  useCallback,
++  useEffect,
++  useRef,
++  useState,
++  type PointerEvent,
++} from "react";
++
++type Point = { x: number; y: number };
++type View = Point & { scale: number };
++type Size = { width: number; height: number };
++const boundedScale = (scale: number) => Math.min(16, Math.max(0.01, scale));
++
++function atPoint(view: View, point: Point, scale: number): View {
++  const next = boundedScale(scale),
++    ratio = next / view.scale;
++  return {
++    scale: next,
++    x: point.x - (point.x - view.x) * ratio,
++    y: point.y - (point.y - view.y) * ratio,
++  };
++}
++
++/** Zoom geometry stays in original image pixels; the host supplies presentation tokens. */
++export function useGalleryImageView(contentPath: string, open: boolean) {
++  const viewport = useRef<HTMLDivElement>(null);
++  const [element, setElement] = useState<HTMLDivElement | null>(null);
++  const attachViewport = useCallback((node: HTMLDivElement | null) => {
++    viewport.current = node;
++    setElement(node);
++  }, []);
++  const imageSize = useRef<Size | null>(null);
++  const fitted = useRef(true);
++  const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 });
++  const viewRef = useRef(view);
++  viewRef.current = view;
++  const pointers = useRef(new Map<number, Point>());
++  const gesture = useRef<{
++    point: Point;
++    view: View;
++    distance: number | null;
++  } | null>(null);
++
++  const fit = useCallback(() => {
++    const area = viewport.current,
++      size = imageSize.current;
++    if (!area || !size || !area.clientWidth || !area.clientHeight) return;
++    const scale = boundedScale(
++      Math.min(
++        area.clientWidth / size.width,
++        area.clientHeight / size.height,
++        1,
++      ),
++    );
++    fitted.current = true;
++    setView({
++      scale,
++      x: (area.clientWidth - size.width * scale) / 2,
++      y: (area.clientHeight - size.height * scale) / 2,
++    });
++  }, []);
++  const zoom = useCallback((factor: number, point?: Point) => {
++    const area = viewport.current;
++    if (!area || !imageSize.current) return;
++    fitted.current = false;
++    setView((value) =>
++      atPoint(
++        value,
++        point ?? { x: area.clientWidth / 2, y: area.clientHeight / 2 },
++        value.scale * factor,
++      ),
++    );
++  }, []);
++  const actualSize = useCallback(() => {
++    const area = viewport.current;
++    if (!area || !imageSize.current) return;
++    fitted.current = false;
++    setView((value) =>
++      atPoint(value, { x: area.clientWidth / 2, y: area.clientHeight / 2 }, 1),
++    );
++  }, []);
++  useEffect(() => {
++    imageSize.current = null;
++    pointers.current.clear();
++    gesture.current = null;
++    fitted.current = true;
++    setView({ scale: 1, x: 0, y: 0 });
++  }, [contentPath, open]);
++  useEffect(() => {
++    const area = element;
++    if (!area || !open) return;
++    const observer =
++      typeof ResizeObserver === "undefined"
++        ? null
++        : new ResizeObserver(() => {
++            if (fitted.current) fit();
++          });
++    observer?.observe(area);
++    const wheel = (event: WheelEvent) => {
++      event.preventDefault();
++      const rect = area.getBoundingClientRect();
++      zoom(Math.exp(-Math.min(100, Math.max(-100, event.deltaY)) * 0.008), {
++        x: event.clientX - rect.left,
++        y: event.clientY - rect.top,
++      });
++    };
++    area.addEventListener("wheel", wheel, { passive: false });
++    return () => {
++      observer?.disconnect();
++      area.removeEventListener("wheel", wheel);
++    };
++  }, [element, contentPath, open, fit, zoom]);
++  const onLoad = (image: HTMLImageElement) => {
++    imageSize.current = {
++      width: image.naturalWidth,
++      height: image.naturalHeight,
++    };
++    fit();
++  };
++  const point = (event: PointerEvent<HTMLDivElement>): Point => {
++    const rect = event.currentTarget.getBoundingClientRect();
++    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
++  };
++  const startGesture = () => {
++    const [a, b] = [...pointers.current.values()];
++    gesture.current = a
++      ? {
++          point: b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a,
++          view: viewRef.current,
++          distance: b ? Math.hypot(b.x - a.x, b.y - a.y) : null,
++        }
++      : null;
++  };
++  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
++    if (event.button !== 0 || !imageSize.current) return;
++    event.preventDefault();
++    event.currentTarget.focus({ preventScroll: true });
++    event.currentTarget.setPointerCapture(event.pointerId);
++    pointers.current.set(event.pointerId, point(event));
++    startGesture();
++  };
++  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
++    if (!pointers.current.has(event.pointerId)) return;
++    pointers.current.set(event.pointerId, point(event));
++    const start = gesture.current,
++      [a, b] = [...pointers.current.values()];
++    if (!start || !a) return;
++    const middle = b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a;
++    const next =
++      b && start.distance
++        ? atPoint(
++            start.view,
++            start.point,
++            (start.view.scale * Math.hypot(b.x - a.x, b.y - a.y)) /
++              Math.max(1, start.distance),
++          )
++        : start.view;
++    fitted.current = false;
++    setView({
++      ...next,
++      x: next.x + middle.x - start.point.x,
++      y: next.y + middle.y - start.point.y,
++    });
++  };
++  const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
++    pointers.current.delete(event.pointerId);
++    startGesture();
++  };
++  return {
++    attachViewport,
++    view,
++    fit,
++    zoom,
++    actualSize,
++    onLoad,
++    onPointerDown,
++    onPointerMove,
++    onPointerEnd,
++  };
++}
+diff --git a/ui/src/components/IssueImageGalleryActions.test.tsx b/ui/src/components/IssueImageGalleryActions.test.tsx
+new file mode 100644
+index 0000000000..e8ed6b4cd3
+--- /dev/null
++++ b/ui/src/components/IssueImageGalleryActions.test.tsx
+@@ -0,0 +1,83 @@
++// @vitest-environment jsdom
++import { createRoot, type Root } from "react-dom/client";
++import { flushSync } from "react-dom";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++import { IssueImageGalleryActions } from "./IssueImageGalleryActions";
++
++const mocks = vi.hoisted(() => ({
++  slots: [] as Record<string, unknown>[],
++  mount: vi.fn(),
++}));
++vi.mock("@/plugins/slots", () => ({
++  usePluginSlots: () => ({ slots: mocks.slots }),
++  PluginSlotMount: (props: unknown) => {
++    mocks.mount(props);
++    return <span>Plugin action</span>;
++  },
++}));
++let root: Root;
++beforeEach(() => {
++  const container = document.createElement("div");
++  document.body.append(container);
++  root = createRoot(container);
++  mocks.mount.mockClear();
++  mocks.slots = [];
++});
++afterEach(() => {
++  flushSync(() => root.unmount());
++  document.body.innerHTML = "";
++});
++const props = {
++  companyId: "company",
++  companyPrefix: "HUM",
++  issueId: "issue",
++  projectId: null,
++  item: {
++    id: "image-2",
++    contentPath: "/api/attachments/image-2/content",
++    contentType: "image/png",
++    originalFilename: "second.png",
++  },
++};
++it("keeps native viewing available when no plugin is installed", () => {
++  flushSync(() => root.render(<IssueImageGalleryActions {...props} />));
++  expect(mocks.mount).not.toHaveBeenCalled();
++});
++it("forwards selected image and company scope through the existing toolbar slot", () => {
++  mocks.slots = [{ pluginId: "plugin", id: "review" }];
++  flushSync(() => root.render(<IssueImageGalleryActions {...props} />));
++  expect(mocks.mount).toHaveBeenLastCalledWith(
++    expect.objectContaining({
++      context: expect.objectContaining({
++        companyId: "company",
++        companyPrefix: "HUM",
++        entityId: "issue",
++      }),
++      componentProps: { imageGallery: props.item },
++    }),
++  );
++});
++it("does not offer image actions for a video", () => {
++  mocks.slots = [{ pluginId: "plugin", id: "review" }];
++  flushSync(() =>
++    root.render(
++      <IssueImageGalleryActions
++        {...props}
++        item={{ ...props.item, contentType: "video/webm" }}
++      />,
++    ),
++  );
++  expect(mocks.mount).not.toHaveBeenCalled();
++});
++it("offers gallery actions for legacy PNG files stored as generic binary", () => {
++  mocks.slots = [{ pluginId: "plugin", id: "review" }];
++  flushSync(() =>
++    root.render(
++      <IssueImageGalleryActions
++        {...props}
++        item={{ ...props.item, contentType: "application/octet-stream" }}
++      />,
++    ),
++  );
++  expect(mocks.mount).toHaveBeenCalled();
++});
+diff --git a/ui/src/components/IssueImageGalleryActions.tsx b/ui/src/components/IssueImageGalleryActions.tsx
+new file mode 100644
+index 0000000000..c2b78b46eb
+--- /dev/null
++++ b/ui/src/components/IssueImageGalleryActions.tsx
+@@ -0,0 +1,46 @@
++import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
++import type { GalleryMediaItem } from "./ImageGalleryModal";
++import { isImageLikeOutput } from "@/lib/issue-output";
++
++/** Reuse the issue toolbar extension point with the selected gallery image as host props. */
++export function IssueImageGalleryActions({
++  companyId,
++  companyPrefix,
++  issueId,
++  projectId,
++  item,
++}: {
++  companyId: string;
++  companyPrefix: string | null;
++  issueId: string;
++  projectId: string | null;
++  item: GalleryMediaItem;
++}) {
++  const { slots } = usePluginSlots({
++    slotTypes: ["toolbarButton"],
++    entityType: "issue",
++    companyId,
++  });
++  if (!isImageLikeOutput(item.contentType, item.originalFilename)) return null;
++  return slots.map((slot) => (
++    <PluginSlotMount
++      key={`${slot.pluginId}:${slot.id}`}
++      slot={slot}
++      context={{
++        companyId,
++        companyPrefix,
++        entityId: issueId,
++        entityType: "issue",
++        projectId,
++      }}
++      componentProps={{
++        imageGallery: {
++          id: item.id,
++          contentPath: item.contentPath,
++          contentType: item.contentType,
++          originalFilename: item.originalFilename,
++        },
++      }}
++    />
++  ));
++}
+diff --git a/ui/src/context/ImageGalleryToolbarContext.ts b/ui/src/context/ImageGalleryToolbarContext.ts
+new file mode 100644
+index 0000000000..a830cc0efa
+--- /dev/null
++++ b/ui/src/context/ImageGalleryToolbarContext.ts
+@@ -0,0 +1,7 @@
++import { createContext, type ReactNode } from "react";
++import type { GalleryMediaItem } from "@/components/ImageGalleryModal";
++
++/** Contextual actions for the selected media, including galleries opened by nested cards. */
++export const ImageGalleryToolbarContext = createContext<
++  ((item: GalleryMediaItem) => ReactNode) | null
++>(null);
+diff --git a/ui/src/pages/IssueDetail.tsx b/ui/src/pages/IssueDetail.tsx
+index abac74816d..69fc1845d8 100644
+--- a/ui/src/pages/IssueDetail.tsx
++++ b/ui/src/pages/IssueDetail.tsx
+@@ -242,6 +242,8 @@ import {
+ import { waitForStoppedRuns } from "../lib/wait-for-stopped-runs";
+ import { useIssueExternalObjects } from "../hooks/useIssueExternalObjects";
+ import { IssueGalleryContext } from "../context/IssueGalleryContext";
++import { ImageGalleryToolbarContext } from "../context/ImageGalleryToolbarContext";
++import { IssueImageGalleryActions } from "../components/IssueImageGalleryActions";
+ import { useIssuePlanDocument } from "../hooks/useIssuePlanDocument";
+ import { useTaskArtifactArrival } from "../hooks/useTaskArtifactArrival";
+ import { IssueRunLedger } from "../components/IssueRunLedger";
+@@ -5951,6 +5953,10 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+     [openIssueGallery],
+   );
+ 
++  const galleryActions = useCallback((item: GalleryMediaItem) => panelIssue ? (
++    <IssueImageGalleryActions companyId={panelIssue.companyId} companyPrefix={companyPrefix ?? null} issueId={panelIssue.id} projectId={panelIssue.projectId ?? null} item={item} />
++  ) : null, [panelIssue?.id, panelIssue?.companyId, panelIssue?.projectId, companyPrefix]);
++
+   useLayoutEffect(() => {
+     if (!panelIssue || suppressPanelUntilPlan || (conversation && !conversation.issue)) {
+       closePanel();
+@@ -7775,6 +7781,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+ 
+   return (
+     <FileViewerProvider issueId={conversation && !conversation.issue ? "" : issue.id} enabled={fileViewerEnabled}>
++      <ImageGalleryToolbarContext.Provider value={galleryActions}>
+       <TextAttachmentContext.Provider value={taskChatShellEnabled ? handleOpenTextAttachment : null}><IssueGalleryContext.Provider value={openIssueGallery}>
+         <div
+           data-task-chat-shell={taskChatShellEnabled ? "" : undefined}
+@@ -8009,6 +8016,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+             initialIndex={galleryIndex}
+             open={galleryOpen}
+             onOpenChange={setGalleryOpen}
++            renderToolbar={galleryActions}
+           />
+ 
+           {taskChatShellEnabled ? null : (
+@@ -8676,6 +8684,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+           <ScrollToBottom />
+         </div>
+       </IssueGalleryContext.Provider></TextAttachmentContext.Provider>
++      </ImageGalleryToolbarContext.Provider>
+     </FileViewerProvider>
+   );
+ }
+-- 
+2.47.1.windows.2
+

@@ -1,0 +1,2 @@
+# Preserve the intentional blank context lines and line endings in unified patches.
+patches/*.patch text eol=lf -whitespace
