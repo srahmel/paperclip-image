@@ -67,18 +67,15 @@ function Styles() {
 }
 export function ImageReviewSidebar() {
   const navigation = useHostNavigation(),
+    location = useHostLocation(),
     t = useLanguage();
+  const active = /\/image-review\/?$/.test(location.pathname);
   return (
     <>
       <Styles />
       <a
-        className="ir-link"
-        style={{
-          border: 0,
-          justifyContent: "start",
-          width: "100%",
-          fontSize: 13,
-        }}
+        className={`flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium transition-colors ${active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}
+        aria-current={active ? "page" : undefined}
         {...navigation.linkProps("/image-review")}
       >
         <ImageIcon />
