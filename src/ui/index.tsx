@@ -87,17 +87,7 @@ export function ImageReviewSidebar() {
     </>
   );
 }
-/** Optional gallery props are supplied by Paperclip's contextual toolbar mount. */
-export function ImageReviewButton({
-  imageGallery,
-}: {
-  imageGallery?: {
-    id: string;
-    contentPath: string;
-    contentType: string;
-    originalFilename: string | null;
-  };
-} = {}) {
+export function ImageReviewButton() {
   const context = useHostContext(),
     location = useHostLocation(),
     navigation = useHostNavigation(),
@@ -109,20 +99,12 @@ export function ImageReviewButton({
     context.entityId,
   );
   if (!taskHref) return null;
-  if (
-    imageGallery &&
-    !rasterContentType(imageGallery.contentType, imageGallery.originalFilename)
-  )
-    return null;
-  const href = imageGallery
-    ? `${taskHref}&image=${encodeURIComponent(imageGallery.contentPath)}`
-    : taskHref;
   return (
     <>
       <Styles />
-      <a className="ir-link" {...navigation.linkProps(href)}>
+      <a className="ir-link" {...navigation.linkProps(taskHref)}>
         <ImageIcon />
-        {t(imageGallery ? "Annotate image" : "Review images")}
+        {t("Review images")}
       </a>
     </>
   );

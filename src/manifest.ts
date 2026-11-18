@@ -3,7 +3,7 @@ export const PLUGIN_ID = "srahmel.image-review";
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_ID,
   apiVersion: 1,
-  version: "0.1.0",
+  version: "0.1.1",
   displayName: "Image review",
   description:
     "Zoom into task images, draw precise feedback, and attach annotated copies to the task.",

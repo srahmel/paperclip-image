@@ -1,6 +1,6 @@
 {
   "name": "@srahmel/paperclip-image",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zoom, annotate, and return visual feedback on Paperclip task images.",
   "type": "module",
   "license": "MIT",
@@ -27,7 +27,6 @@
   },
   "files": [
     "dist",
-    "patches",
     "licenses",
     "README.md",
     "LICENSE"

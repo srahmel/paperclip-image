@@ -5,7 +5,7 @@ A Paperclip plugin for inspecting images and giving precise visual feedback to t
 ## Features
 
 - An **Image review** sidebar page and a **Review images** link on task pages.
-- Optional host patch: zoom/pan directly in Paperclip's existing gallery, plus **Annotate image** for its selected image.
+- Uses the official task toolbar and plugin page. No Paperclip core patch is required.
 - Load native task image attachments, or open a local image.
 - Wheel zoom, pan, fit-to-window, actual size, and two-finger touch zoom.
 - Freehand pen, arrows, rectangles, numbered pins, five ink colors, and stroke widths.
@@ -42,22 +42,17 @@ Open **Review images** on a task, select an image, and zoom to the area you want
 
 The original is preserved. The comment links both the original and marked copy and includes coordinates in the original image's pixel space, with the origin at the top left. Existing images are reused; a local image is also uploaded as an original. Publishing only happens on an explicit button click.
 
-### Open directly from the normal image gallery
+### Host integration
 
-The plugin alone provides its dedicated review page. To enhance the existing click-to-open viewer, apply the companion [Paperclip UI patch](patches/paperclip-image-gallery.patch). It adds wheel zoom, pan, fit, actual size, and a contextual plugin toolbar. **Annotate image** opens the exact selected native attachment in this plugin, even if several revisions share the same filename. There is no image re-selection step.
+Version 0.1.1 uses only the public `toolbarButton`, `page` and `sidebar` plugin
+slots. Open **Review images** on the task, then select its attachment inside the
+plugin. Zoom and annotations belong to the plugin's own viewer. The normal
+Paperclip gallery remains host-owned.
 
-The patch targets the local Paperclip source based on `9a9643ba5951c91abe05bda2a623a50e340a0f84`. Inspect repository status and check applicability before applying it:
-
-```sh
-git -C /path/to/paperclip status --short
-git -C /path/to/paperclip apply --check /path/to/paperclip-image/patches/paperclip-image-gallery.patch
-git -C /path/to/paperclip apply /path/to/paperclip-image/patches/paperclip-image-gallery.patch
-pnpm --dir /path/to/paperclip/ui exec vite build --emptyOutDir false
-```
-
-Rebuild/reload the host UI using its normal deployment procedure. Keeping existing assets during a local static-UI rebuild lets already open clients finish using their current chunks. Reload the browser after the new UI is available. The host patch is UI-only: it does not add server routes, database tables, or plugin permissions. Native viewing and zoom also work without the plugin; the annotation action appears when the plugin's existing issue toolbar contribution is installed.
-
-The narrow extension contract is the optional `imageGallery` component prop on an issue `toolbarButton` contribution: `{ id, contentPath, contentType, originalFilename }`. The plugin still receives ordinary company/issue scope through the public SDK bridge. Gallery deep links only select an image from the current task's authorized attachment list; query parameters never authorize a separate fetch.
+Do not apply the old gallery patch. It is no longer shipped or required.
+An installation that used it can remove that feature patch after verifying the
+plugin task entry and editor. Removing the plugin leaves native viewing and
+all original attachments intact.
 
 The hand icon is **Move**; the pencil icon is **Pen**. Hover a tool for its name and shortcut. The active tool is visibly pressed, and all icon buttons retain accessible labels. Shortcuts: **V** move/pan, **P** pen, **A** arrow, **R** rectangle, **N** pin, **F** fit, **+ / −** zoom, **Ctrl/Cmd+Z** undo, **Ctrl/Cmd+Shift+Z** redo. Typing in text fields does not trigger these shortcuts.
 
